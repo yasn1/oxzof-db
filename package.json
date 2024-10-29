@@ -1,6 +1,6 @@
 {
   "name": "oxzof-db",
-  "version": "1.5.1",
+  "version": "2.5.0",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -10,6 +10,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "bson": "^6.9.0",
     "fs": "^0.0.1-security",
     "path": "^0.12.7"
   }
