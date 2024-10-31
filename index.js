@@ -37,17 +37,17 @@ class Database {
 
                     if (localVersion !== latestVersion) {
                         console.warn(
-                            `\x1b[31m[oxzof-db] Uyarı: Güncel sürüm ${latestVersion} olarak yayınlandı. Lütfen paketi güncelleyin.\x1b[0m`
+                            `\x1b[31m[oxzof-db] Warning: The current version is published as ${latestVersion}. Please update the package: npm i oxzof-db@latest\x1b[0m`
                         );
                     }
                 });
             }).on("error", (err) => {
-                console.error("NPM sürüm kontrolünde hata:", err.message);
+                console.error("Error in NPM version control:", err.message);
             });
 
             this.isVersionChecked = true;
         } catch (e) {
-            console.error("Versiyon kontrolü sırasında hata:", e.message);
+            console.error("Error during version check:", e.message);
         }
     }
 
@@ -88,7 +88,6 @@ class Database {
             if (data.length === 0) {
                 return {};
             }
-            
             return BSON.deserialize(data);
         } catch (e) {
             console.log(e);
@@ -125,7 +124,7 @@ class Database {
             await this.checkFile();
             const data = await this.readFile();
             if (!key) {
-                return data;
+                return undefined;
             } else {
                 return data[key] !== undefined ? data[key] : null;
             }
@@ -135,6 +134,18 @@ class Database {
         }
     }
 
+    async all(){
+        try{
+            await this.checkFile();
+            const data = await this.readFile();
+            const keys = Object.entries(data).map(([key, value]) => ({ [key]: value }));
+            return keys
+        }catch(e){
+            console.log(e.message);
+            return false;
+        }
+    }
+    
     async push(key, value) {
         while (this.isWriting) {
             await new Promise(resolve => setTimeout(resolve, 10));
@@ -147,10 +158,47 @@ class Database {
                 data[key] = [];
             }
             if (!Array.isArray(data[key])) {
-                console.log(`Bu veri değeri bir dizi değil: ${data[key]}`);
+                console.log(`This data value is not an array: ${data[key]}`);
                 return false;
             }
-            data[key].push(value);
+            if(Array.isArray(value)){
+                value.forEach(x => {
+                    data[key].push(x)
+                })
+            }else{
+                data[key].push(value);
+            }
+            const write = await this.writeFile(data);
+            return write;
+        } catch (e) {
+            console.log(e.message);
+            return false;
+        } finally {
+            this.isWriting = false;
+        }
+    }
+    async unpush(key,element){
+        while (this.isWriting) {
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        this.isWriting = true;
+        try {
+            await this.checkFile();
+            const data = await this.readFile();
+            if (!data[key]) {
+                return undefined;
+            }
+            if (!Array.isArray(data[key])) {
+                console.log(`This data value is not an array: ${data[key]}`);
+                return false;
+            }
+            if(Array.isArray(element)){
+                element.forEach(x => {
+                    data[key] = data[key].filter(xy => xy !== x)
+                })
+            }else{
+                data[key]=data[key].filter(x => x !== element)
+            }
             const write = await this.writeFile(data);
             return write;
         } catch (e) {
@@ -169,7 +217,7 @@ class Database {
             await this.checkFile();
             const data = await this.readFile();
             if (!key) {
-                console.error("delete function needs a key!");
+                console.error("Delete function needs a key!");
                 return false;
             }
             if (data.hasOwnProperty(key)) {
@@ -187,6 +235,23 @@ class Database {
             this.isWriting = false;
         }
     }
+    async deleteAll() {
+        while (this.isWriting) {
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        this.isWriting = true;
+        try {
+            await this.checkFile();
+            const emptyData = BSON.serialize({});
+            await fs.promises.writeFile(this.file, emptyData);
+            return true;
+        } catch (e) {
+            console.log(e.message);
+            return false;
+        } finally {
+            this.isWriting = false;
+        }
+    }
     
 }
 
@@ -196,8 +261,11 @@ function createInstance(file, filePath) {
     return {
         set: instance.set.bind(instance),
         delete: instance.delete.bind(instance),
+        deleteAll: instance.deleteAll.bind(instance),
         get: instance.get.bind(instance),
-        push: instance.push.bind(instance)
+        push: instance.push.bind(instance),
+        unpush: instance.unpush.bind(instance),
+        all: instance.all.bind(instance)
     };
 }
 
