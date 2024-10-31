@@ -25,6 +25,6 @@ const db = database();
 await db.set('potato','hello'); // Assign the value "hello" to the key "potato".
 await db.get('potato'); // returns "hello"
 await db.push('array','new element'); // Adds a new value named "new element" to the "array" list.
-await db.all(); Returns all data in the database.
+await db.all(); // Returns all data in the database.
 await db.delete('key'); // Remove the object matching the "key" object in the data.
 ```
