@@ -1,14 +1,22 @@
 {
   "name": "oxzof-db",
-  "version": "2.5.0",
+  "version": "2.5.7",
   "description": "",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": [
+    "oxzof",
+    "oxzofdb",
+    "database",
+    "oxzof-db",
+    "veritabanı",
+    "bsondb",
+    "bson-db"
+  ],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "bson": "^6.9.0",
     "fs": "^0.0.1-security",

@@ -2,9 +2,18 @@ const fs = require("fs");
 const path = require("path");
 const https = require("https");
 const { BSON } = require("bson"); 
+const { exec } = require("child_process");
 
 class Database {
-    constructor(file = false) {
+    constructor(file=false,options={}) {
+        const {logMessages,autoUpdate} = options;
+        if(logMessages==true){
+            this.logs=true;
+        }
+        if(autoUpdate==true){
+            this.autoUpdate=true;
+        }
+
         const filePath = process.cwd()
         this.packageName = "oxzof-db";
         this.isVersionChecked = false;
@@ -21,6 +30,8 @@ class Database {
         await this.checkFile();
     }
 
+    
+
     async checkPackageVersion() {
         if (this.isVersionChecked) return;
 
@@ -36,18 +47,42 @@ class Database {
                     const latestVersion = JSON.parse(data)["dist-tags"].latest;
 
                     if (localVersion !== latestVersion) {
-                        console.warn(
-                            `\x1b[31m[oxzof-db] Warning: The current version is published as ${latestVersion}. Please update the package: npm i oxzof-db@latest\x1b[0m`
-                        );
+                        if(this.autoUpdate==true){
+                            this.messageLog(
+                                "New update available, autoUpdate active. Updating...","warning"
+                              );
+                            exec(`npm install ${this.packageName}@latest`,(error, stdout, stderr) => {
+                                if (error) {
+                                  this.messageLog(
+                                    error
+                                  );
+                                  return;
+                                }
+                            
+                                if (stderr) {
+                                  this.messageLog(
+                                    stderr
+                                  );
+                                  return;
+                                }
+                                this.messageLog(
+                                    `Module update completed: ${stdout}`
+                                  ,"success");
+                              });
+                        }else{
+                            this.messageLog(
+                                `The current version is published as ${latestVersion}. Please update the package: npm i oxzof-db@latest`
+                            ,"warning");
+                        }
                     }
                 });
             }).on("error", (err) => {
-                console.error("Error in NPM version control:", err.message);
+                this.messageLog("Error in NPM version control: "+ err.message);
             });
 
             this.isVersionChecked = true;
         } catch (e) {
-            console.error("Error during version check:", e.message);
+            this.messageLog("Error during version check: "+e.message);
         }
     }
 
@@ -65,7 +100,7 @@ class Database {
             }
         }
         if (!this.file.endsWith('.bson')) {
-            console.error("The file extension must be .bson: ", this.filePath);
+            this.messageLog("The file extension must be .bson: "+ this.filePath);
             return false;
         }
         return true;
@@ -77,7 +112,7 @@ class Database {
             await fs.promises.writeFile(this.file, bsonData);
             return true;
         } catch (e) {
-            console.log(e);
+            this.messageLog(e);
             return false;
         }
     }
@@ -90,8 +125,26 @@ class Database {
             }
             return BSON.deserialize(data);
         } catch (e) {
-            console.log(e);
+            this.messageLog(e);
             return false;
+        }
+    }
+    messageLog(msg,type="error"){
+        switch(type){
+            case "error":
+                if(this.logs){
+                    console.warn(`\x1b[31m[oxzof-db] Error: ${msg} \x1b[0m`)
+                }
+                break;
+            case "warning":
+                console.warn(`\x1b[33m[oxzof-db] Warning: ${msg} \x1b[0m`)
+                break;
+            case "success":
+                console.warn(`\x1b[32m[oxzof-db] Success: ${msg} \x1b[0m`)
+                break;
+            default:
+                console.warn(`\x1b[31m[oxzof-db] Info: ${msg} \x1b[0m`)
+                break;
         }
     }
 
@@ -110,9 +163,9 @@ class Database {
                 data[key] = value;
             }
             const write = await this.writeFile(data);
-            return write;
+            return write?data[key]:false;
         } catch (e) {
-            console.log(e.message);
+            this.messageLog(e.message);
             return false;
         } finally {
             this.isWriting = false;
@@ -129,7 +182,7 @@ class Database {
                 return data[key] !== undefined ? data[key] : null;
             }
         } catch (e) {
-            console.log(e.message);
+            this.messageLog(e.message);
             return false;
         }
     }
@@ -141,7 +194,7 @@ class Database {
             const keys = Object.entries(data).map(([key, value]) => ({ [key]: value }));
             return keys
         }catch(e){
-            console.log(e.message);
+            this.messageLog(e.message);
             return false;
         }
     }
@@ -158,7 +211,7 @@ class Database {
                 data[key] = [];
             }
             if (!Array.isArray(data[key])) {
-                console.log(`This data value is not an array: ${data[key]}`);
+                this.messageLog(`This data value is not an array: ${data[key]}`);
                 return false;
             }
             if(Array.isArray(value)){
@@ -168,15 +221,49 @@ class Database {
             }else{
                 data[key].push(value);
             }
-            const write = await this.writeFile(data);
-            return write;
+            await this.writeFile(data);
+            return data[key];
         } catch (e) {
-            console.log(e.message);
+            this.messageLog(e.message);
             return false;
         } finally {
             this.isWriting = false;
         }
     }
+    async unpushByIndex(key,index){
+        while (this.isWriting) {
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        this.isWriting = true;
+        try {
+            await this.checkFile();
+            const data = await this.readFile();
+            if (!data[key]) {
+                return undefined;
+            }
+            if (!Array.isArray(data[key])) {
+                this.messageLog(`This data value is not an array: ${data[key]}`);
+                return false;
+            }
+            if(data[key].length<index||index<0){
+                this.messageLog("Invalid index number for unpushByIndex() function")
+                return false
+            }
+            if(isNaN(index)){
+                this.messageLog("Invalid argument, unpushByIndex() expects a valid index")
+                return false
+            }
+            data[key].splice(index,1)
+            await this.writeFile(data);
+            return data[key];
+        } catch (e) {
+            this.messageLog(e.message);
+            return false;
+        } finally {
+            this.isWriting = false;
+        }
+    }
+
     async unpush(key,element){
         while (this.isWriting) {
             await new Promise(resolve => setTimeout(resolve, 10));
@@ -200,7 +287,7 @@ class Database {
                 data[key]=data[key].filter(x => x !== element)
             }
             const write = await this.writeFile(data);
-            return write;
+            return data[key];
         } catch (e) {
             console.log(e.message);
             return false;
@@ -208,6 +295,8 @@ class Database {
             this.isWriting = false;
         }
     }
+
+
     async delete(key) {
         while (this.isWriting) {
             await new Promise(resolve => setTimeout(resolve, 10));
@@ -217,7 +306,7 @@ class Database {
             await this.checkFile();
             const data = await this.readFile();
             if (!key) {
-                console.error("Delete function needs a key!");
+                this.messageLog("delete() function needs a key!");
                 return false;
             }
             if (data.hasOwnProperty(key)) {
@@ -225,11 +314,11 @@ class Database {
                 await this.writeFile(data);
                 return true;
             } else {
-                console.error("Data key not found:", key);
+                this.messageLog(`delete() function: "${key}" data key is invalid`);
                 return false;
             }
         } catch (e) {
-            console.log(e.message);
+            this.messageLog(e.message);
             return false;
         } finally {
             this.isWriting = false;
@@ -246,12 +335,14 @@ class Database {
             await fs.promises.writeFile(this.file, emptyData);
             return true;
         } catch (e) {
-            console.log(e.message);
+            this.messageLog(e.message);
             return false;
         } finally {
             this.isWriting = false;
         }
     }
+
+    
     
 }
 
@@ -265,6 +356,7 @@ function createInstance(file, filePath) {
         get: instance.get.bind(instance),
         push: instance.push.bind(instance),
         unpush: instance.unpush.bind(instance),
+        unpushByIndex: instance.unpushByIndex.bind(instance),
         all: instance.all.bind(instance)
     };
 }
