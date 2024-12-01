@@ -57,12 +57,15 @@ await db.deleteAll(); // clears entire database
 # Example Usages
 
 ## Import Module
+
 ```javascript
 const database = require('oxzof-db');
 const db = database(null,{ // default file path
     logMessages:true, // writes function errors to the console.
     autoUpdate:true // if update available: will be updated automatically when the project is restarted.
-});```
+});
+```
+
 
 ## Set & Get Functions
 ```javascript
